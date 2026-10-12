@@ -1,0 +1,36 @@
+# ===== 环境 =====
+.env
+.env.*
+
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# ===== IDE / 系统 =====
+.idea/
+.vscode/
+.DS_Store
+.ipynb_checkpoints/
+.wucai/
+
+# ===== 模型权重（太大）=====
+models/
+
+# ===== 构建产物 =====
+disney_index.faiss
+disney_metadata.json
+
+# ===== 全量知识库（不公开，含版权 + 太大）=====
+迪士尼RAG知识库（完整）/
+
+# ===== 一次性调试脚本 =====
+check_models.py
+fix_4.py
+test_singapore.py
+
+# ===== 本地输出 =====
+output*.txt
+*.log

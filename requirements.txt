@@ -1,0 +1,5 @@
+dashscope==1.25.5
+faiss_cpu==1.7.4
+numpy==1.26.4
+openai==2.14.0
+python_docx==1.1.2

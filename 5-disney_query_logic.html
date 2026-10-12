@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>迪士尼RAG助手 - 核心逻辑流程图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
+    <style>
+        body {
+            font-family: 'Microsoft YaHei', sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+            border-bottom: 2px solid #ff6b6b;
+            padding-bottom: 10px;
+        }
+        .mermaid {
+            text-align: center;
+            margin: 20px 0;
+        }
+        .code-block {
+            background-color: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 4px;
+            padding: 15px;
+            margin: 15px 0;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            overflow-x: auto;
+        }
+        .description {
+            margin: 15px 0;
+            line-height: 1.6;
+        }
+        .key-points {
+            background-color: #e8f4fd;
+            border-left: 4px solid #007bff;
+            padding: 10px 15px;
+            margin: 15px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>迪士尼RAG助手 - 查询处理核心逻辑</h1>
+        
+        <div class="description">
+            <p>迪士尼RAG助手是一个多模态检索增强生成系统，支持文本、图片和视频的混合检索。</p>
+        </div>
+        
+        <div class="key-points">
+            <strong>核心功能：</strong>
+            <ul>
+                <li>加载FAISS索引和元数据</li>
+                <li>多模态Embedding（文本/图片/视频）</li>
+                <li>意图识别（文本/图片/视频）</li>
+                <li>相似度计算与排名</li>
+                <li>RAG问答生成</li>
+            </ul>
+        </div>
+        
+        <h2>主流程图</h2>
+        <div class="mermaid">
+graph TD
+    A[开始 - 用户查询] --> B[加载索引和元数据]
+    B --> C[获取查询文本Embedding]
+    C --> D[在FAISS索引中搜索相似内容]
+    D --> E[计算相似度排名并显示详情]
+    E --> F[检测媒体意图 - 图片/视频关键词]
+    F --> G{是否需要图片?}
+    G -->|是| H[查找匹配图片]
+    G -->|否| I{是否需要视频?}
+    H --> I
+    I -->|是| J[查找匹配视频]
+    I -->|否| K[选择Top-k文本结果]
+    J --> K
+    K --> L[构建RAG Prompt]
+    L --> M[调用LLM生成答案]
+    M --> N[附加匹配媒体信息]
+    N --> O[返回最终答案]
+    
+    style A fill:#ff9999
+    style O fill:#99ff99
+    style D fill:#ffff99
+    style F fill:#99ccff
+    style M fill:#ffcc99
+        </div>
+        
+        <h2>关键组件详解</h2>
+        
+        <div class="code-block">
+# 配置参数
+MULTIMODAL_EMBEDDING_MODEL = "tongyi-embedding-vision-flash"
+INDEX_FILE = "disney_index.faiss"
+METADATA_FILE = "disney_metadata.json"
+MEDIA_DISTANCE_THRESHOLD = 3.0
+
+# 关键词配置
+IMAGE_KEYWORDS = ["图片", "海报", "照片", "看看", "长什么样", "图"]
+VIDEO_KEYWORDS = ["视频", "录像", "影片", "看一下", "播放"]
+        </div>
+        
+        <div class="description">
+            <p><strong>Embedding处理：</strong>使用通义千问的多模态Embedding模型将文本转换为向量</p>
+            <p><strong>距离计算：</strong>使用L2距离，通过公式 1/(1+距离) 转换为相似度</p>
+            <p><strong>媒体意图识别：</strong>通过关键词匹配检测用户是否需要图片或视频内容</p>
+        </div>
+        
+        <h2>检索与匹配流程</h2>
+        <div class="mermaid">
+graph TD
+    A[输入查询] --> B[生成查询向量]
+    B --> C[FAISS索引搜索]
+    C --> D[获取所有匹配结果]
+    D --> E[按距离排序]
+    E --> F[显示相似度排名]
+    F --> G[过滤文本结果 Top-k]
+    G --> H[过滤图片结果 距离<threshold]
+    H --> I[过滤视频结果 距离<threshold]
+    I --> J[取最匹配的图片Top-1]
+    J --> K[取最匹配的视频Top-1]
+    K --> L[构建RAG上下文]
+    
+    style C fill:#ffeb3b
+    style F fill:#4caf50
+    style L fill:#9c27b0
+        </div>
+        
+        <div class="code-block">
+def rag_ask(query, index, metadata, k=3):
+    # 1. 检索相似内容并显示详情
+    results = search_with_details(query, index, metadata)
+    
+    # 2. 检测媒体意图
+    want_image, want_video = detect_media_intent(query)
+    
+    # 3. 获取Top-k文本结果
+    top_results = [r for r in results 
+                   if r["metadata"]["type"] == "text"][:k]
+    
+    # 4. 匹配图片（距离<threshold）
+    if want_image:
+        image_results = [r for r in results 
+                         if r["metadata"]["type"] == "image" 
+                         and r["distance"] < MEDIA_DISTANCE_THRESHOLD]
+        if image_results:
+            matched_image = min(image_results, 
+                               key=lambda x: x["distance"])
+    
+    # 5. 匹配视频（距离<threshold）
+    if want_video:
+        video_results = [r for r in results 
+                         if r["metadata"]["type"] == "video" 
+                         and r["distance"] < MEDIA_DISTANCE_THRESHOLD]
+        if video_results:
+            matched_video = min(video_results, 
+                               key=lambda x: x["distance"])
+    
+    # 6. 构建Prompt并调用LLM
+    context_str = ""  # 构建过程
+    answer = "LLM生成答案"  # 实际LLM调用
+    if matched_image: 
+        answer += f"\\n\\n[相关图片]: {matched_image['metadata']['path']}"
+    if matched_video: 
+        answer += f"\\n\\n[相关视频]: {matched_video['metadata']['url']}"
+    return answer
+        </div>
+        
+        <div class="key-points">
+            <strong>关键技术点：</strong>
+            <ul>
+                <li>多模态Embedding支持文本、图像、视频统一表示</li>
+                <li>FAISS向量数据库实现高效相似度搜索</li>
+                <li>关键词匹配实现意图识别</li>
+                <li>距离阈值过滤确保媒体匹配质量</li>
+                <li>多模态结果融合生成综合回答</li>
+            </ul>
+        </div>
+        
+        <h2>测试用例</h2>
+        <div class="mermaid">
+graph LR
+    A[文本查询: 门票退款流程] --> B[返回文本答案]
+    C[图片查询: 万圣节海报] --> D[返回文本+图片]
+    E[视频查询: 汽车剐蹭] --> F[返回文本+视频]
+    
+    style A fill:#ffebee
+    style C fill:#e8f5e8
+    style E fill:#e3f2fd
+    style B fill:#fff3e0
+    style D fill:#f3e5f5
+    style F fill:#e0f2f1
+        </div>
+    </div>
+
+    <script>
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'default',
+            flowchart: {
+                useMaxWidth: true,
+                htmlLabels: true
+            }
+        });
+    </script>
+</body>
+</html>
