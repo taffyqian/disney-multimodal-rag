@@ -4,7 +4,7 @@
 > 面向企业客服场景的多模态检索增强生成（RAG）系统
 > 支持 **文本 / 图片 / 视频** 混合检索 · **三阶段检索流水线** · 端到端可运行
 
-**🌐 语言**: [English](./README.md) · **简体中文** · [Self notes](./README.self.md)
+**🌐 语言**: [English](./README.md) · **简体中文**
 
 [![Python](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![FAISS](https://img.shields.io/badge/FAISS-IndexFlatIP-0467DF)](https://github.com/facebookresearch/faiss)

@@ -3,7 +3,7 @@
 > A production-grade Retrieval-Augmented Generation (RAG) system for enterprise customer-service scenarios
 > **Multi-modal retrieval** (text / image / video) · **Three-stage retrieval pipeline** · **End-to-end runnable**
 
-**🌐 Language**: **English** · [简体中文](./README.zh-CN.md) · [Self notes](./README.self.md)
+**🌐 Language**: **English** · [简体中文](./README.zh-CN.md)
 
 [![Python](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![FAISS](https://img.shields.io/badge/FAISS-IndexFlatIP-0467DF)](https://github.com/facebookresearch/faiss)
