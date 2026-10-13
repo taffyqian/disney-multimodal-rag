@@ -1,8 +1,13 @@
 # -*- coding: utf-8 -*-
 """
-迪士尼RAG助手 V5.1 - 查询处理（Mac 防 segfault 版）
+迪士尼RAG助手 V5.2 - 查询处理
 
-关键改动（修 Mac torch 段错误）：
+关键改动（解决媒体被文本淹没）：
+- 媒体检索走【独立通道】：全局扫描 + 阈值筛，不参与文本 Top-K 竞争
+- 文本检索：向量 + BM25 → RRF → Reranker
+- 媒体检索：向量全局扫描 → 阈值筛 → Top-1
+
+Mac 防 segfault：
 - 文件顶部限制 OMP/MKL 线程为 1
 - torch.set_num_threads(1)
 - Reranker 显式 device="cpu"
@@ -32,7 +37,6 @@ from http import HTTPStatus
 from openai import OpenAI
 from rank_bm25 import BM25Okapi
 
-# 限制 torch 线程（在 import torch 之后、用之前）
 import torch
 torch.set_num_threads(1)
 
@@ -69,7 +73,7 @@ FUSION_TOP_K = 20
 RERANK_TOP_N = 3
 RRF_K = 60
 
-# 媒体匹配阈值
+# 媒体匹配阈值（跨模态天然低）
 MEDIA_SIM_THRESHOLD = 0.10
 
 # 意图识别正则
@@ -161,7 +165,7 @@ def detect_media_intent(query):
     return detect_intent_by_llm(query)
 
 
-# ---------- 通道1：向量检索 ----------
+# ---------- 通道1：向量检索（用于文本 Top-K）----------
 def vector_search(query, index, metadata, top_k):
     qvec = np.asarray([get_text_embedding(query)], dtype="float32")
     sims, idxs = index.search(qvec, min(top_k, index.ntotal))
@@ -211,7 +215,7 @@ def rerank(query, candidates, top_n):
         scored = []
         for c in candidates:
             pair = (query, c["metadata"]["content"])
-            s = reranker.predict([pair])   # 逐条，避免批量并行
+            s = reranker.predict([pair])
             scored.append((c, float(s[0])))
         ranked = sorted(scored, key=lambda x: -x[1])[:top_n]
         return [
@@ -227,17 +231,56 @@ def rerank(query, candidates, top_n):
         return candidates[:top_n]
 
 
+# ============================================================
+# ★★★ 新增：媒体独立检索（解决被文本淹没问题）★★★
+# ============================================================
+def find_best_media(index, metadata, media_type, query, threshold=0.10):
+    """
+    全局扫描所有该类型媒体，取相似度最高的一个。
+    不走 Top-K，避免被大量文本 chunk 挤出。
+    """
+    qvec = np.asarray([get_text_embedding(query)], dtype="float32")
+    sims, idxs = index.search(qvec, index.ntotal)
+
+    best = None
+    all_media = []  # 用于调试打印
+    for idx, sim in zip(idxs[0], sims[0]):
+        if idx == -1:
+            continue
+        m = metadata[idx]
+        if m["type"] != media_type:
+            continue
+        all_media.append((float(sim), m))
+        if float(sim) < threshold:
+            continue
+        if best is None or float(sim) > best["score"]:
+            best = {"idx": int(idx), "score": float(sim), "metadata": m}
+
+    # 调试：打印所有该类型媒体的相似度
+    all_media.sort(key=lambda x: -x[0])
+    if all_media:
+        print(f"    [{media_type} 全局扫描] 共 {len(all_media)} 个:")
+        for sim, m in all_media[:3]:
+            preview = m.get("content", "")[:40]
+            print(f"      {sim:.4f} | {preview}...")
+
+    return best
+
+
 # ---------- 完整检索流水线 ----------
 def search_pipeline(query, index, metadata, bm25, text_metas):
     print(f"\n[检索流水线]")
 
+    # Step 1: 双通道召回
     vec_res = vector_search(query, index, metadata, RECALL_TOP_K)
     bm25_res = bm25_search(query, bm25, text_metas, RECALL_TOP_K)
     print(f"  Step1 召回: 向量 {len(vec_res)} | BM25 {len(bm25_res)}")
 
+    # Step 2: RRF 融合
     fused = rrf_fusion([vec_res, bm25_res])
     print(f"  Step2 RRF: {len(fused)}")
 
+    # Step 3: Reranker 精排（只对文本）
     top_candidates = fused[:FUSION_TOP_K]
     reranked = rerank(query, top_candidates, RERANK_TOP_N)
     print(f"  Step3 Rerank: {len(reranked)}")
@@ -269,31 +312,33 @@ def rag_ask(query, index, metadata, bm25, text_metas, k=3):
     for r in reranked[:k]:
         print(f"  {r['rerank_score']:.4f} | {r['metadata']['content'][:50]}...")
 
+    # ★★★ 意图识别 + 媒体独立检索 ★★★
     want_image, want_video = detect_media_intent(query)
     print(f"\n意图: 图片={want_image}, 视频={want_video}")
 
     matched_image = None
     if want_image:
-        imgs = [r for r in vec_res
-                if r["metadata"]["type"] == "image"
-                and r["score"] >= MEDIA_SIM_THRESHOLD]
-        if imgs:
-            matched_image = max(imgs, key=lambda x: x["score"])
-            print(f"  → 图片: {matched_image['metadata']['path']} (sim={matched_image['score']:.4f})")
+        print(f"  → 独立检索图片通道...")
+        matched_image = find_best_media(
+            index, metadata, "image", query, MEDIA_SIM_THRESHOLD
+        )
+        if matched_image:
+            print(f"  → 命中图片: {matched_image['metadata']['path']} (sim={matched_image['score']:.4f})")
         else:
-            print(f"  → 用户要图片，无匹配（阈值 {MEDIA_SIM_THRESHOLD}）")
+            print(f"  → 无图片达到阈值 {MEDIA_SIM_THRESHOLD}")
 
     matched_video = None
     if want_video:
-        vids = [r for r in vec_res
-                if r["metadata"]["type"] == "video"
-                and r["score"] >= MEDIA_SIM_THRESHOLD]
-        if vids:
-            matched_video = max(vids, key=lambda x: x["score"])
-            print(f"  → 视频: {matched_video['metadata']['url']} (sim={matched_video['score']:.4f})")
+        print(f"  → 独立检索视频通道...")
+        matched_video = find_best_media(
+            index, metadata, "video", query, MEDIA_SIM_THRESHOLD
+        )
+        if matched_video:
+            print(f"  → 命中视频: {matched_video['metadata']['url']} (sim={matched_video['score']:.4f})")
         else:
-            print(f"  → 用户要视频，无匹配（阈值 {MEDIA_SIM_THRESHOLD}）")
+            print(f"  → 无视频达到阈值 {MEDIA_SIM_THRESHOLD}")
 
+    # 构建 Prompt（只用文本）
     context = "\n\n".join(
         f"[资料{i+1} 来源: {r['metadata']['source']}]\n{r['metadata']['content']}"
         for i, r in enumerate(reranked[:k])
