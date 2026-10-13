@@ -188,6 +188,13 @@ def find_best_media(index, metadata, media_type, query, threshold=0.10):
 ---
 
 ## 📊 运行效果
+### 📄 演示报告
+
+| 报告 | 说明 |
+|------|------|
+| [📊 **关键截图报告**](./docs/demo_screenshot.pdf) | 关键结果一页速览 — Rerank **0.8976**、媒体 **0.1878**（视频）/ **0.1856**（图片） |
+| [📄 **完整运行记录**](./docs/demo_transcript.pdf) | 端到端 RAG 流程完整输出 |
+| [📝 **原始文本**](./docs/demo_output.txt) | 纯文本记录（可搜索） |
 
 ### 知识库规模
 

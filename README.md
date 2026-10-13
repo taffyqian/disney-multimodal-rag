@@ -213,6 +213,13 @@ Low latency in the common case, high coverage in the edge case.
 - **Two outputs are independent**: text goes to LLM; media is supplementary display
 
 ### Sample Output
+### 📄 Demo Reports
+
+| Report | Description |
+|--------|-------------|
+| [📊 **Screenshot Report**](./docs/demo_screenshot.pdf) | Key results at a glance — Rerank **0.8976**, Media **0.1878** (video) / **0.1856** (image) |
+| [📄 **Full Transcript**](./docs/demo_transcript.pdf) | Complete end-to-end RAG pipeline output |
+| [📝 **Raw Output**](./docs/demo_output.txt) | Plain-text transcript (searchable) |
 
 **Test 3 (video query) — media independent retrieval nails it**:
 
